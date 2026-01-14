@@ -11,44 +11,41 @@ import (
 	"os"
 )
 
-// Field represents a Lambda context field to include in log records.
-type Field struct {
+// field represents a Lambda context field to include in log records.
+type field struct {
 	key   string
 	value func(*LambdaContext) string
 }
 
-// FieldFunctionARN returns a Field that includes the invoked function ARN in log records.
-func FieldFunctionARN() Field {
-	return Field{"functionArn", func(lc *LambdaContext) string { return lc.InvokedFunctionArn }}
-}
-
-// FieldTenantID returns a Field that includes the tenant ID in log records (for multi-tenant functions).
-func FieldTenantID() Field {
-	return Field{"tenantId", func(lc *LambdaContext) string { return lc.TenantID }}
-}
-
 // logOptions holds configuration for the Lambda log handler.
 type logOptions struct {
-	fields []Field
+	fields []field
 }
 
 // LogOption is a functional option for configuring the Lambda log handler.
 type LogOption func(*logOptions)
 
-// WithFields includes the specified fields in log records.
-func WithFields(fields ...Field) LogOption {
+// WithFunctionARN includes the invoked function ARN in log records.
+func WithFunctionARN() LogOption {
 	return func(o *logOptions) {
-		o.fields = append(o.fields, fields...)
+		o.fields = append(o.fields, field{"functionArn", func(lc *LambdaContext) string { return lc.InvokedFunctionArn }})
 	}
 }
 
-// LogHandler returns a [slog.Handler] for AWS Lambda structured logging.
+// WithTenantID includes the tenant ID in log records (for multi-tenant functions).
+func WithTenantID() LogOption {
+	return func(o *logOptions) {
+		o.fields = append(o.fields, field{"tenantId", func(lc *LambdaContext) string { return lc.TenantID }})
+	}
+}
+
+// NewLogHandler returns a [slog.Handler] for AWS Lambda structured logging.
 // It reads AWS_LAMBDA_LOG_FORMAT and AWS_LAMBDA_LOG_LEVEL from environment,
 // and injects requestId from Lambda context into each log record.
 //
-// By default, only requestId is injected. Use WithFields to include more.
+// By default, only requestId is injected. Use WithFunctionARN or WithTenantID to include more.
 // See the package examples for usage.
-func LogHandler(opts ...LogOption) slog.Handler {
+func NewLogHandler(opts ...LogOption) slog.Handler {
 	options := &logOptions{}
 	for _, opt := range opts {
 		opt(options)
@@ -70,6 +67,12 @@ func LogHandler(opts ...LogOption) slog.Handler {
 	return &lambdaHandler{handler: h, fields: options.fields}
 }
 
+// NewLogger returns a [*slog.Logger] configured for AWS Lambda structured logging.
+// This is a convenience function equivalent to slog.New(NewLogHandler(opts...)).
+func NewLogger(opts ...LogOption) *slog.Logger {
+	return slog.New(NewLogHandler(opts...))
+}
+
 // ReplaceAttr maps slog's default keys to AWS Lambda's log format (time->timestamp, msg->message).
 func ReplaceAttr(groups []string, attr slog.Attr) slog.Attr {
 	if len(groups) > 0 {
@@ -85,16 +88,10 @@ func ReplaceAttr(groups []string, attr slog.Attr) slog.Attr {
 	return attr
 }
 
-// Attrs returns Lambda context fields as slog-compatible key-value pairs.
-// For most use cases, using [LogHandler] with slog.InfoContext is preferred.
-func (lc *LambdaContext) Attrs() []any {
-	return []any{"requestId", lc.AwsRequestID}
-}
-
 // lambdaHandler wraps a slog.Handler to inject Lambda context fields.
 type lambdaHandler struct {
 	handler slog.Handler
-	fields  []Field
+	fields  []field
 }
 
 // Enabled implements slog.Handler.

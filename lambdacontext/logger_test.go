@@ -16,14 +16,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAttrs(t *testing.T) {
-	lc := &LambdaContext{
-		AwsRequestID: "test-request-id",
-	}
-	attrs := lc.Attrs()
-	assert.Equal(t, []any{"requestId", "test-request-id"}, attrs)
-}
-
 func TestReplaceAttr(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -268,9 +260,15 @@ func TestLogHandler_WithFields(t *testing.T) {
 		ReplaceAttr: ReplaceAttr,
 	}
 	baseHandler := slog.NewJSONHandler(&buf, opts)
+
+	// Create options with fields
+	options := &logOptions{}
+	WithFunctionARN()(options)
+	WithTenantID()(options)
+
 	handler := &lambdaHandler{
 		handler: baseHandler,
-		fields:  []Field{FieldFunctionARN(), FieldTenantID()},
+		fields:  options.fields,
 	}
 
 	lc := &LambdaContext{
@@ -300,9 +298,13 @@ func TestLogHandler_WithFieldFunctionARNOnly(t *testing.T) {
 		ReplaceAttr: ReplaceAttr,
 	}
 	baseHandler := slog.NewJSONHandler(&buf, opts)
+
+	options := &logOptions{}
+	WithFunctionARN()(options)
+
 	handler := &lambdaHandler{
 		handler: baseHandler,
-		fields:  []Field{FieldFunctionARN()},
+		fields:  options.fields,
 	}
 
 	lc := &LambdaContext{
@@ -332,9 +334,14 @@ func TestLogHandler_FieldsEmpty(t *testing.T) {
 		ReplaceAttr: ReplaceAttr,
 	}
 	baseHandler := slog.NewJSONHandler(&buf, opts)
+
+	options := &logOptions{}
+	WithFunctionARN()(options)
+	WithTenantID()(options)
+
 	handler := &lambdaHandler{
 		handler: baseHandler,
-		fields:  []Field{FieldFunctionARN(), FieldTenantID()},
+		fields:  options.fields,
 	}
 
 	lc := &LambdaContext{
@@ -356,26 +363,43 @@ func TestLogHandler_FieldsEmpty(t *testing.T) {
 	assert.NotContains(t, logOutput, "tenantId")
 }
 
-func TestWithFields(t *testing.T) {
+func TestWithFunctionARN(t *testing.T) {
 	options := &logOptions{}
-	WithFields(FieldFunctionARN(), FieldTenantID())(options)
+	WithFunctionARN()(options)
 
-	assert.Len(t, options.fields, 2)
+	assert.Len(t, options.fields, 1)
 	assert.Equal(t, "functionArn", options.fields[0].key)
-	assert.Equal(t, "tenantId", options.fields[1].key)
+
+	lc := &LambdaContext{InvokedFunctionArn: "arn:aws:lambda:us-east-1:123456789:function:test"}
+	assert.Equal(t, "arn:aws:lambda:us-east-1:123456789:function:test", options.fields[0].value(lc))
 }
 
-func TestFieldFunctions(t *testing.T) {
-	lc := &LambdaContext{
-		InvokedFunctionArn: "arn:aws:lambda:us-east-1:123456789:function:test",
-		TenantID:           "tenant-abc",
-	}
+func TestWithTenantID(t *testing.T) {
+	options := &logOptions{}
+	WithTenantID()(options)
 
-	arnField := FieldFunctionARN()
-	assert.Equal(t, "functionArn", arnField.key)
-	assert.Equal(t, "arn:aws:lambda:us-east-1:123456789:function:test", arnField.value(lc))
+	assert.Len(t, options.fields, 1)
+	assert.Equal(t, "tenantId", options.fields[0].key)
 
-	tenantField := FieldTenantID()
-	assert.Equal(t, "tenantId", tenantField.key)
-	assert.Equal(t, "tenant-abc", tenantField.value(lc))
+	lc := &LambdaContext{TenantID: "tenant-abc"}
+	assert.Equal(t, "tenant-abc", options.fields[0].value(lc))
+}
+
+func TestNewLogger(t *testing.T) {
+	LogFormat = "JSON"
+	LogLevel = "INFO"
+
+	logger := NewLogger()
+	assert.NotNil(t, logger)
+}
+
+func TestNewLogHandler(t *testing.T) {
+	LogFormat = "JSON"
+	LogLevel = "INFO"
+
+	handler := NewLogHandler()
+	assert.NotNil(t, handler)
+
+	handlerWithOpts := NewLogHandler(WithFunctionARN(), WithTenantID())
+	assert.NotNil(t, handlerWithOpts)
 }
