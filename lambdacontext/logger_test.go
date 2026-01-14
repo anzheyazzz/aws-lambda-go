@@ -84,19 +84,19 @@ func TestParseLogLevel(t *testing.T) {
 		{"ERROR", "ERROR", slog.LevelError},
 		{"empty", "", slog.LevelInfo},
 		{"INVALID", "INVALID", slog.LevelInfo},
-		{"lowercase debug", "debug", slog.LevelInfo}, // case sensitive
+		{"lowercase debug", "debug", slog.LevelInfo},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			LogLevelName = tt.input
+			LogLevel = tt.input
 			result := parseLogLevel()
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-func TestHandler_JSONFormat(t *testing.T) {
+func TestLogHandler_JSONFormat(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -125,7 +125,7 @@ func TestHandler_JSONFormat(t *testing.T) {
 	assert.NotContains(t, logOutput, "tenantId")
 }
 
-func TestHandler_NoLambdaContext(t *testing.T) {
+func TestLogHandler_NoLambdaContext(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -135,7 +135,6 @@ func TestHandler_NoLambdaContext(t *testing.T) {
 	baseHandler := slog.NewJSONHandler(&buf, opts)
 	handler := &lambdaHandler{handler: baseHandler}
 
-	// Create context WITHOUT Lambda context
 	ctx := context.Background()
 
 	logger := slog.New(handler)
@@ -149,8 +148,7 @@ func TestHandler_NoLambdaContext(t *testing.T) {
 	assert.NotContains(t, logOutput, "requestId")
 }
 
-func TestHandler_ConcurrencySafe(t *testing.T) {
-	// This test verifies that different contexts get different requestIds
+func TestLogHandler_ConcurrencySafe(t *testing.T) {
 	var buf1, buf2 bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -158,25 +156,21 @@ func TestHandler_ConcurrencySafe(t *testing.T) {
 		ReplaceAttr: ReplaceAttr,
 	}
 
-	// Create two handlers writing to different buffers
 	handler1 := &lambdaHandler{handler: slog.NewJSONHandler(&buf1, opts)}
 	handler2 := &lambdaHandler{handler: slog.NewJSONHandler(&buf2, opts)}
 
-	// Create two contexts with different request IDs
 	lc1 := &LambdaContext{AwsRequestID: "request-aaa"}
 	lc2 := &LambdaContext{AwsRequestID: "request-bbb"}
 
 	ctx1 := NewContext(context.Background(), lc1)
 	ctx2 := NewContext(context.Background(), lc2)
 
-	// Log with both loggers
 	logger1 := slog.New(handler1)
 	logger2 := slog.New(handler2)
 
 	logger1.InfoContext(ctx1, "message 1")
 	logger2.InfoContext(ctx2, "message 2")
 
-	// Verify each has correct requestId
 	var output1, output2 map[string]interface{}
 	require.NoError(t, json.Unmarshal(buf1.Bytes(), &output1))
 	require.NoError(t, json.Unmarshal(buf2.Bytes(), &output2))
@@ -185,9 +179,7 @@ func TestHandler_ConcurrencySafe(t *testing.T) {
 	assert.Equal(t, "request-bbb", output2["requestId"])
 }
 
-func TestHandler_SharedHandlerConcurrencySafe(t *testing.T) {
-	// This is the key test: a SINGLE shared handler should still produce
-	// correct requestIds for different contexts
+func TestLogHandler_SharedHandlerConcurrencySafe(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -195,22 +187,18 @@ func TestHandler_SharedHandlerConcurrencySafe(t *testing.T) {
 		ReplaceAttr: ReplaceAttr,
 	}
 
-	// Single shared handler
 	sharedHandler := &lambdaHandler{handler: slog.NewJSONHandler(&buf, opts)}
 	logger := slog.New(sharedHandler)
 
-	// Create two contexts with different request IDs
 	lc1 := &LambdaContext{AwsRequestID: "request-aaa"}
 	lc2 := &LambdaContext{AwsRequestID: "request-bbb"}
 
 	ctx1 := NewContext(context.Background(), lc1)
 	ctx2 := NewContext(context.Background(), lc2)
 
-	// Log with the same logger but different contexts
 	logger.InfoContext(ctx1, "message 1")
 	logger.InfoContext(ctx2, "message 2")
 
-	// Parse both lines
 	lines := bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n"))
 	require.Len(t, lines, 2)
 
@@ -218,12 +206,11 @@ func TestHandler_SharedHandlerConcurrencySafe(t *testing.T) {
 	require.NoError(t, json.Unmarshal(lines[0], &output1))
 	require.NoError(t, json.Unmarshal(lines[1], &output2))
 
-	// Verify each log line has the correct requestId from its context
 	assert.Equal(t, "request-aaa", output1["requestId"])
 	assert.Equal(t, "request-bbb", output2["requestId"])
 }
 
-func TestHandler_WithAttrs(t *testing.T) {
+func TestLogHandler_WithAttrs(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -236,7 +223,6 @@ func TestHandler_WithAttrs(t *testing.T) {
 	lc := &LambdaContext{AwsRequestID: "test-request"}
 	ctx := NewContext(context.Background(), lc)
 
-	// Create logger with additional attrs
 	logger := slog.New(handler).With("service", "test-service")
 	logger.InfoContext(ctx, "test message")
 
@@ -248,7 +234,7 @@ func TestHandler_WithAttrs(t *testing.T) {
 	assert.Equal(t, "test-service", logOutput["service"])
 }
 
-func TestHandler_WithGroup(t *testing.T) {
+func TestLogHandler_WithGroup(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -261,7 +247,6 @@ func TestHandler_WithGroup(t *testing.T) {
 	lc := &LambdaContext{AwsRequestID: "test-request"}
 	ctx := NewContext(context.Background(), lc)
 
-	// Create logger with a group
 	logger := slog.New(handler).WithGroup("app").With("version", "1.0")
 	logger.InfoContext(ctx, "test message")
 
@@ -269,15 +254,13 @@ func TestHandler_WithGroup(t *testing.T) {
 	err := json.Unmarshal(buf.Bytes(), &logOutput)
 	require.NoError(t, err)
 
-	// When using WithGroup, the requestId from Handle() goes into the group
-	// because the underlying handler has been wrapped with WithGroup
 	app, ok := logOutput["app"].(map[string]interface{})
 	require.True(t, ok, "expected 'app' group in output: %s", buf.String())
 	assert.Equal(t, "1.0", app["version"])
 	assert.Equal(t, "test-request", app["requestId"])
 }
 
-func TestHandler_WithOptionalFields(t *testing.T) {
+func TestLogHandler_WithFields(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -287,7 +270,7 @@ func TestHandler_WithOptionalFields(t *testing.T) {
 	baseHandler := slog.NewJSONHandler(&buf, opts)
 	handler := &lambdaHandler{
 		handler: baseHandler,
-		fields:  []Field{FunctionArn, TenantId},
+		fields:  []Field{FieldFunctionARN(), FieldTenantID()},
 	}
 
 	lc := &LambdaContext{
@@ -309,7 +292,7 @@ func TestHandler_WithOptionalFields(t *testing.T) {
 	assert.Equal(t, "tenant-abc", logOutput["tenantId"])
 }
 
-func TestHandler_WithFunctionArnOnly(t *testing.T) {
+func TestLogHandler_WithFieldFunctionARNOnly(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -319,7 +302,7 @@ func TestHandler_WithFunctionArnOnly(t *testing.T) {
 	baseHandler := slog.NewJSONHandler(&buf, opts)
 	handler := &lambdaHandler{
 		handler: baseHandler,
-		fields:  []Field{FunctionArn},
+		fields:  []Field{FieldFunctionARN()},
 	}
 
 	lc := &LambdaContext{
@@ -341,7 +324,7 @@ func TestHandler_WithFunctionArnOnly(t *testing.T) {
 	assert.NotContains(t, logOutput, "tenantId")
 }
 
-func TestHandler_OptionalFieldsEmpty(t *testing.T) {
+func TestLogHandler_FieldsEmpty(t *testing.T) {
 	var buf bytes.Buffer
 
 	opts := &slog.HandlerOptions{
@@ -351,10 +334,9 @@ func TestHandler_OptionalFieldsEmpty(t *testing.T) {
 	baseHandler := slog.NewJSONHandler(&buf, opts)
 	handler := &lambdaHandler{
 		handler: baseHandler,
-		fields:  []Field{FunctionArn, TenantId},
+		fields:  []Field{FieldFunctionARN(), FieldTenantID()},
 	}
 
-	// Only requestId is set, optional fields are empty
 	lc := &LambdaContext{
 		AwsRequestID:       "test-request-123",
 		InvokedFunctionArn: "",
@@ -372,4 +354,28 @@ func TestHandler_OptionalFieldsEmpty(t *testing.T) {
 	assert.Equal(t, "test-request-123", logOutput["requestId"])
 	assert.NotContains(t, logOutput, "functionArn")
 	assert.NotContains(t, logOutput, "tenantId")
+}
+
+func TestWithFields(t *testing.T) {
+	options := &logOptions{}
+	WithFields(FieldFunctionARN(), FieldTenantID())(options)
+
+	assert.Len(t, options.fields, 2)
+	assert.Equal(t, "functionArn", options.fields[0].key)
+	assert.Equal(t, "tenantId", options.fields[1].key)
+}
+
+func TestFieldFunctions(t *testing.T) {
+	lc := &LambdaContext{
+		InvokedFunctionArn: "arn:aws:lambda:us-east-1:123456789:function:test",
+		TenantID:           "tenant-abc",
+	}
+
+	arnField := FieldFunctionARN()
+	assert.Equal(t, "functionArn", arnField.key)
+	assert.Equal(t, "arn:aws:lambda:us-east-1:123456789:function:test", arnField.value(lc))
+
+	tenantField := FieldTenantID()
+	assert.Equal(t, "tenantId", tenantField.key)
+	assert.Equal(t, "tenant-abc", tenantField.value(lc))
 }

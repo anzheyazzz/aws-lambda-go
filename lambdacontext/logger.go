@@ -11,44 +11,63 @@ import (
 	"os"
 )
 
-// Field represents an optional field to include in log records.
+// Field represents a Lambda context field to include in log records.
 type Field struct {
 	key   string
 	value func(*LambdaContext) string
 }
 
-// FunctionArn includes the invoked function ARN in log records.
-var FunctionArn = Field{"functionArn", func(lc *LambdaContext) string { return lc.InvokedFunctionArn }} //nolint: staticcheck
+// FieldFunctionARN returns a Field that includes the invoked function ARN in log records.
+func FieldFunctionARN() Field {
+	return Field{"functionArn", func(lc *LambdaContext) string { return lc.InvokedFunctionArn }}
+}
 
-// TenantId includes the tenant ID in log records (for multi-tenant functions).
-var TenantId = Field{"tenantId", func(lc *LambdaContext) string { return lc.TenantID }} //nolint: staticcheck
+// FieldTenantID returns a Field that includes the tenant ID in log records (for multi-tenant functions).
+func FieldTenantID() Field {
+	return Field{"tenantId", func(lc *LambdaContext) string { return lc.TenantID }}
+}
 
-// Handler returns a [slog.Handler] for AWS Lambda structured logging.
+// logOptions holds configuration for the Lambda log handler.
+type logOptions struct {
+	fields []Field
+}
+
+// LogOption is a functional option for configuring the Lambda log handler.
+type LogOption func(*logOptions)
+
+// WithFields includes the specified fields in log records.
+func WithFields(fields ...Field) LogOption {
+	return func(o *logOptions) {
+		o.fields = append(o.fields, fields...)
+	}
+}
+
+// LogHandler returns a [slog.Handler] for AWS Lambda structured logging.
 // It reads AWS_LAMBDA_LOG_FORMAT and AWS_LAMBDA_LOG_LEVEL from environment,
 // and injects requestId from Lambda context into each log record.
 //
-// By default, only requestId is injected. Pass optional fields to include more:
-//
-//	// Default: only requestId
-//	slog.SetDefault(slog.New(lambdacontext.Handler()))
-//
-//	// With functionArn and tenantId
-//	slog.SetDefault(slog.New(lambdacontext.Handler(lambdacontext.FunctionArn, lambdacontext.TenantId)))
-func Handler(fields ...Field) slog.Handler {
+// By default, only requestId is injected. Use WithFields to include more.
+// See the package examples for usage.
+func LogHandler(opts ...LogOption) slog.Handler {
+	options := &logOptions{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	level := parseLogLevel()
-	opts := &slog.HandlerOptions{
+	handlerOpts := &slog.HandlerOptions{
 		Level:       level,
 		ReplaceAttr: ReplaceAttr,
 	}
 
 	var h slog.Handler
-	if LogFormatName == "JSON" {
-		h = slog.NewJSONHandler(os.Stdout, opts)
+	if LogFormat == "JSON" {
+		h = slog.NewJSONHandler(os.Stdout, handlerOpts)
 	} else {
-		h = slog.NewTextHandler(os.Stdout, opts)
+		h = slog.NewTextHandler(os.Stdout, handlerOpts)
 	}
 
-	return &lambdaHandler{handler: h, fields: fields}
+	return &lambdaHandler{handler: h, fields: options.fields}
 }
 
 // ReplaceAttr maps slog's default keys to AWS Lambda's log format (time->timestamp, msg->message).
@@ -67,7 +86,7 @@ func ReplaceAttr(groups []string, attr slog.Attr) slog.Attr {
 }
 
 // Attrs returns Lambda context fields as slog-compatible key-value pairs.
-// For most use cases, using [Handler] with slog.InfoContext is preferred.
+// For most use cases, using [LogHandler] with slog.InfoContext is preferred.
 func (lc *LambdaContext) Attrs() []any {
 	return []any{"requestId", lc.AwsRequestID}
 }
@@ -88,9 +107,9 @@ func (h *lambdaHandler) Handle(ctx context.Context, r slog.Record) error {
 	if lc, ok := FromContext(ctx); ok {
 		r.AddAttrs(slog.String("requestId", lc.AwsRequestID))
 
-		for _, f := range h.fields {
-			if v := f.value(lc); v != "" {
-				r.AddAttrs(slog.String(f.key, v))
+		for _, field := range h.fields {
+			if v := field.value(lc); v != "" {
+				r.AddAttrs(slog.String(field.key, v))
 			}
 		}
 	}
@@ -114,7 +133,7 @@ func (h *lambdaHandler) WithGroup(name string) slog.Handler {
 }
 
 func parseLogLevel() slog.Level {
-	switch LogLevelName {
+	switch LogLevel {
 	case "DEBUG":
 		return slog.LevelDebug
 	case "INFO":
