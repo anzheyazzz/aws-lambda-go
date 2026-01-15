@@ -15,12 +15,6 @@ import (
 	"strconv"
 )
 
-// LogFormat is the log format, either TEXT or JSON (from AWS_LAMBDA_LOG_FORMAT)
-var LogFormat string
-
-// LogLevel is the log level for structured logging (from AWS_LAMBDA_LOG_LEVEL). Only available when LogFormat is JSON
-var LogLevel string
-
 // LogGroupName is the name of the log group that contains the log streams of the current Lambda Function
 var LogGroupName string
 
@@ -39,8 +33,6 @@ var FunctionVersion string
 var maxConcurrency int
 
 func init() {
-	LogFormat = os.Getenv("AWS_LAMBDA_LOG_FORMAT")
-	LogLevel = os.Getenv("AWS_LAMBDA_LOG_LEVEL")
 	LogGroupName = os.Getenv("AWS_LAMBDA_LOG_GROUP_NAME")
 	LogStreamName = os.Getenv("AWS_LAMBDA_LOG_STREAM_NAME")
 	FunctionName = os.Getenv("AWS_LAMBDA_FUNCTION_NAME")

@@ -81,7 +81,7 @@ func TestParseLogLevel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			LogLevel = tt.input
+			logLevel = tt.input
 			result := parseLogLevel()
 			assert.Equal(t, tt.expected, result)
 		})
@@ -386,17 +386,11 @@ func TestWithTenantID(t *testing.T) {
 }
 
 func TestNewLogger(t *testing.T) {
-	LogFormat = "JSON"
-	LogLevel = "INFO"
-
 	logger := NewLogger()
 	assert.NotNil(t, logger)
 }
 
 func TestNewLogHandler(t *testing.T) {
-	LogFormat = "JSON"
-	LogLevel = "INFO"
-
 	handler := NewLogHandler()
 	assert.NotNil(t, handler)
 

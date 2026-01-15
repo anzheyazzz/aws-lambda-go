@@ -11,6 +11,12 @@ import (
 	"os"
 )
 
+// logFormat is the log format from AWS_LAMBDA_LOG_FORMAT (TEXT or JSON)
+var logFormat = os.Getenv("AWS_LAMBDA_LOG_FORMAT")
+
+// logLevel is the log level from AWS_LAMBDA_LOG_LEVEL
+var logLevel = os.Getenv("AWS_LAMBDA_LOG_LEVEL")
+
 // field represents a Lambda context field to include in log records.
 type field struct {
 	key   string
@@ -58,7 +64,7 @@ func NewLogHandler(opts ...LogOption) slog.Handler {
 	}
 
 	var h slog.Handler
-	if LogFormat == "JSON" {
+	if logFormat == "JSON" {
 		h = slog.NewJSONHandler(os.Stdout, handlerOpts)
 	} else {
 		h = slog.NewTextHandler(os.Stdout, handlerOpts)
@@ -130,7 +136,7 @@ func (h *lambdaHandler) WithGroup(name string) slog.Handler {
 }
 
 func parseLogLevel() slog.Level {
-	switch LogLevel {
+	switch logLevel {
 	case "DEBUG":
 		return slog.LevelDebug
 	case "INFO":
