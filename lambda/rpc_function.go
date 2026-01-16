@@ -9,7 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/rpc"
 	"os"
@@ -35,11 +35,13 @@ func init() {
 func startFunctionRPC(port string, handler Handler) error {
 	lis, err := net.Listen("tcp", "localhost:"+port)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to listen on port", "port", port, "error", err)
+		os.Exit(1)
 	}
 	err = rpc.Register(NewFunction(handler))
 	if err != nil {
-		log.Fatal("failed to register handler function")
+		slog.Error("failed to register handler function", "error", err)
+		os.Exit(1)
 	}
 	rpc.Accept(lis)
 	return errors.New("accept should not have returned")

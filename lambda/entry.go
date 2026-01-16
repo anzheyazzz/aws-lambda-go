@@ -4,7 +4,8 @@ package lambda
 
 import (
 	"context"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 )
 
@@ -85,7 +86,10 @@ var (
 	startFunctions = []*startFunction{runtimeAPIStartFunction}
 
 	// This allows end to end testing of the Start functions, by tests overwriting this function to keep the program alive
-	logFatalf = log.Fatalf
+	logFatalf = func(format string, v ...any) {
+		slog.Error(fmt.Sprintf(format, v...))
+		os.Exit(1)
+	}
 )
 
 // StartHandlerWithContext is the same as StartHandler except sets the base context for the function.

@@ -3,7 +3,7 @@
 package lambda
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -27,7 +27,7 @@ func enableSIGTERM(sigtermHandlers []func()) {
 	// detect if we're actually running within Lambda
 	endpoint := os.Getenv("AWS_LAMBDA_RUNTIME_API")
 	if endpoint == "" {
-		log.Print("WARNING! AWS_LAMBDA_RUNTIME_API environment variable not found. Skipping attempt to register internal extension...")
+		slog.Warn("AWS_LAMBDA_RUNTIME_API environment variable not found, skipping attempt to register internal extension")
 		return
 	}
 
@@ -39,7 +39,7 @@ func enableSIGTERM(sigtermHandlers []func()) {
 	client := newExtensionAPIClient(endpoint)
 	id, err := client.register("GoLangEnableSIGTERM")
 	if err != nil {
-		log.Printf("WARNING! Failed to register internal extension! SIGTERM events may not be enabled! err: %v", err)
+		slog.Warn("failed to register internal extension, SIGTERM events may not be enabled", "error", err)
 		return
 	}
 
@@ -47,7 +47,7 @@ func enableSIGTERM(sigtermHandlers []func()) {
 	// Because we didn't register for any events, /next will never return, so we'll do this in a go routine that is doomed to stay blocked.
 	go func() {
 		_, err := client.next(id)
-		log.Printf("WARNING! Reached expected unreachable code! Extension /next call expected to block forever! err: %v", err)
+		slog.Warn("reached expected unreachable code, extension /next call expected to block forever", "error", err)
 	}()
 
 }
