@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"time"
@@ -103,7 +103,10 @@ func handleInvoke(invoke *invoke, handler *handlerOptions) error {
 
 func reportFailure(invoke *invoke, invokeErr *messages.InvokeResponse_Error) error {
 	errorPayload := safeMarshal(invokeErr)
-	log.Printf("%s", errorPayload)
+	slog.Error("lambda invoke error",
+		"errorType", invokeErr.Type,
+		"errorMessage", invokeErr.Message,
+	)
 
 	causeForXRay, err := json.Marshal(makeXRayError(invokeErr))
 	if err != nil {
