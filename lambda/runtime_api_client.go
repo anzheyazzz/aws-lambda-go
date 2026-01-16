@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil" //nolint: staticcheck
-	"log"
 	"net/http"
 	"runtime"
 	"sync"
@@ -102,7 +101,7 @@ func (c *runtimeAPIClient) next(ctx context.Context) (*invoke, error) {
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.Printf("runtime API client failed to close %s response body: %v", url, err)
+			logWarn(fmt.Sprintf("runtime API client failed to close %s response body: %v", url, err))
 		}
 	}()
 
@@ -146,7 +145,7 @@ func (c *runtimeAPIClient) post(url string, body io.Reader, contentType string, 
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			log.Printf("runtime API client failed to close %s response body: %v", url, err)
+			logWarn(fmt.Sprintf("runtime API client failed to close %s response body: %v", url, err))
 		}
 	}()
 	if resp.StatusCode != http.StatusAccepted {

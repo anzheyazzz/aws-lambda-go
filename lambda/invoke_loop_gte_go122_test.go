@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"math/rand"
 	"net"
@@ -113,9 +112,12 @@ func TestRuntimeAPILoopWithConcurrencyPanic(t *testing.T) {
 	ts, record := runtimeAPIServer(``, 100)
 	defer ts.Close()
 
-	var logBuf bytes.Buffer
-	log.SetOutput(&logBuf)
-	defer log.SetOutput(os.Stderr)
+	// Capture stderr instead of log output
+	origStderr := os.Stderr
+	defer func() { os.Stderr = origStderr }()
+
+	r, w, _ := os.Pipe()
+	os.Stderr = w
 
 	var counter atomic.Int32
 	handler := NewHandler(func() error {
@@ -125,6 +127,12 @@ func TestRuntimeAPILoopWithConcurrencyPanic(t *testing.T) {
 	})
 	endpoint := strings.Split(ts.URL, "://")[1]
 	err := startRuntimeAPILoopWithConcurrency(endpoint, handler, concurrency)
+
+	// Close writer and read captured stderr
+	w.Close()
+	var logBuf bytes.Buffer
+	_, _ = logBuf.ReadFrom(r)
+
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "calling the handler function resulted in a panic, the process should exit")
 	assert.Equal(t, concurrency, record.nGets)
